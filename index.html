@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+  </head>
+  <body>
+    123
+    <script>
+      window.a = 2;
+      // 如果有问题，将此值改成true
+      SW_FALLBACK = false;
+
+      if ('serviceWorker' in navigator) {
+        if (!SW_FALLBACK) {
+          navigator.serviceWorker
+            .register('/sw.js')
+            .then((registration) => {
+              console.log('Service Worker 注册成功！');
+            })
+            .catch((error) => {
+              console.log('Service Worker 注册失败：', error);
+            });
+        } else {
+          navigator.serviceWorker.getRegistration('/').then((reg) => {
+            reg && reg.unregister();
+            if (reg) {
+              window.location.reload();
+            }
+          });
+        }
+      }
+    </script>
+    <script src="./mock.js" type="text/javascript"></script>
+  </body>
+</html>
