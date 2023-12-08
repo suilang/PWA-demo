@@ -699,6 +699,72 @@ function isExpiredWithTime(response, time) {
   return true; // 已过期
 }
 ```
+### 注意
+
+在真实的验证过程中，有部分资源获取不到`date`这个数据，因此为了保险，我们还是在存入缓存时，自己补充一个存入时间
+```js
+ // 克隆响应并将其添加到缓存中
+var clonedResponse = networkResponse.clone();
+// 在存储到缓存之前，设置正确的缓存头部
+var headers = new Headers(networkResponse.headers);
+
+headers.append('sw-save-date', Date.now());
+
+// 创建新的响应对象并存储到缓存中
+var cachedResponse = new Response(clonedResponse.body, {
+  status: networkResponse.status,
+  statusText: networkResponse.statusText,
+  headers: headers,
+});
+```
+
+在判断过期时，取我们自己写入的`key`即可。
+```js
+function isExpiredWithTime(response, time) {
+  var requestTime = Number(response.headers.get('sw-save-date'));
+  if (!requestTime) {
+    return false;
+  }
+  var expirationTime = requestTime + time * 1000;
+  // 检查当前时间是否超过了缓存的有效期
+  if (Date.now() < expirationTime) {
+    return false; // 未过期
+  }
+  return true; // 已过期
+}
+```
+### 不可见响应
+
+还记得上面为了安全考虑，在存入缓存时，对响应的状态做了判断，非200的都不缓存。然后就又发现异常场景了。
+
+```js
+ // 检查是否成功获取到响应
+if (!response || response.status !== 200) {
+  return response; // 返回原始响应
+}
+```
+`opaque` 响应通常指的是跨源请求（CORS）中的一种情况，在该情况下，浏览器出于安全考虑，不允许访问服务端返回的响应内容。`opaque` 响应通常发生在服务工作者（Service Workers）进行的跨源请求中，且没有CORS头部的情况下。
+
+`opaque` 响应的特征是：
+
+- 响应的内容无法被JavaScript访问。
+- 响应的大小无法确定，因此Chrome开发者工具中会显示为 (opaque)。
+- 响应的状态码通常是 0，即使实际上服务器可能返回了不同的状态码。
+
+因此我们需要做一些补充动作。不单是补充`cors`模式，还得同步设置下`credentials`。
+
+```js
+ const newRequest =
+  request.url === 'index.html'
+    ? request
+    : new Request(request, { mode: 'cors', credentials: 'omit' });
+```
+
+在Service Workers发起网络请求时，如果页面本身需要认证，那就像上面代码那样，对页面请求做个判断。`request.url === 'index.html'`是我写的示例，真实请求中，需要拼出完整的url路径。而对于资源文件，走非认证的cors请求即可。将请求的request改为我们变更后的newRequest，请求资源就可以正常的被缓存了。
+
+```js
+var fetchPromise = fetch(newRequest).then(function (networkResponse)
+```
 
 ## 销毁
 
